@@ -185,6 +185,11 @@ def desenhar_tela(tela, passaros, canos, chao, pontos):
 def main(genomas, config): # fitness function
     global geracao
     geracao += 1
+    chao = Chao(730)
+    canos = [Cano(700)]
+    tela = pygame.display.set_mode((TELA_LARGURA, TELA_ALTURA))
+    pontos = 0
+    relogio = pygame.time.Clock()
 
     if ai_jogando:
         redes = []
@@ -198,11 +203,6 @@ def main(genomas, config): # fitness function
             passaros.append(Passaro(230, 350))
     else:
         passaros = [Passaro(230, 350)]
-    chao = Chao(730)
-    canos = [Cano(700)]
-    tela = pygame.display.set_mode((TELA_LARGURA, TELA_ALTURA))
-    pontos = 0
-    relogio = pygame.time.Clock()
 
     rodando = True
     while rodando:
@@ -262,8 +262,9 @@ def main(genomas, config): # fitness function
         if adicionar_cano:
             pontos += 1
             canos.append(Cano(600))
-            for genoma in lista_genomas:
-                genoma.fitness += 5
+            if ai_jogando:
+                for genoma in lista_genomas:
+                    genoma.fitness += 5
         for cano in remover_canos:
             canos.remove(cano)
 

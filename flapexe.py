@@ -3,7 +3,7 @@ import os
 import random
 import neat
 
-ai_jogando = False 
+# ai_jogando = False 
 geracao = 0
 
 TELA_LAR = 500
@@ -192,7 +192,7 @@ class Button:
                 return True
         return False           
 
-def desenhar_tela(tela, passaros, canos, chao, pontos):
+def desenhar_tela(tela, passaros, canos, chao, pontos,ai_jogando):
     tela.blit(IMAGEM_BACK, (0, 0))
 
     for pas in passaros:
@@ -202,43 +202,34 @@ def desenhar_tela(tela, passaros, canos, chao, pontos):
     texto = FONTE_P.render(f"Pontuação: {pontos}", 1, (255, 255, 255))
     tela.blit(texto, (TELA_LAR - 10 - texto.get_width(), 10))
 
-    if ai_jogando[1] == True:
+    if ai_jogando == True:
         texto = FONTE_P.render(f"Geração: {geracao}", 1, (255, 255, 255))
         tela.blit(texto, (10, 10))
 
     chao.desenhar(tela)
     pygame.display.update()
 
-
-def main(genomas, config):  # fitness function
-
+def main_ia(genomas, config): # fitness function
     global geracao
     geracao += 1
     chao = Chao(730)
-    canos = [Cano(800)]
+    canos = [Cano(700)]
     tela = pygame.display.set_mode((TELA_LAR, TELA_ALT))
     pontos = 0
     relogio = pygame.time.Clock()
-    ai_jogando = menu(tela)
-    rodando = menu(tela)
 
 
-    print()
-    if ai_jogando[1] == True :
-        redes = []
-        lista_genomas = []
-        passaros = []
-        for _, genoma in genomas:
-            rede = neat.nn.FeedForwardNetwork.create(genoma, config)
-            redes.append(rede)
-            genoma.fitness = 0
-            lista_genomas.append(genoma)
-            passaros.append(Passaro(230, 350))
-    else:
-        passaros = [Passaro(230, 350)]
-    
+    redes = []
+    lista_genomas = []
+    passaros = []
+    for _, genoma in genomas:
+        rede = neat.nn.FeedForwardNetwork.create(genoma, config)
+        redes.append(rede)
+        genoma.fitness = 0
+        lista_genomas.append(genoma)
+        passaros.append(Passaro(230, 350))
 
-
+    rodando = True
     while rodando:
         relogio.tick(30)
 
@@ -248,11 +239,6 @@ def main(genomas, config):  # fitness function
                 rodando = False
                 pygame.quit()
                 quit()
-            if not ai_jogando:
-                if evento.type == pygame.KEYDOWN:
-                    if evento.key == pygame.K_UP:
-                        for passaro in passaros:
-                            passaro.jump()
 
         indice_cano = 0
         if len(passaros) > 0:
@@ -265,15 +251,15 @@ def main(genomas, config):  # fitness function
         # mover as coisas
         for i, passaro in enumerate(passaros):
             passaro.mover()
-
-            if ai_jogando[1] == True:
-                lista_genomas[i].fitness += 0.1
-                output = redes[i].activate((passaro.y,
-                                            abs(passaro.y - canos[indice_cano].altura),
-                                            abs(passaro.y - canos[indice_cano].pos_base)))
-                # -1 e 1 -> se o output for > 0.5 então o passaro pula
-                if output[0] > 0.5:
-                        passaro.jump()
+            # aumentar um pouquinho a fitness do passaro
+    
+            lista_genomas[i].fitness += 0.1
+            output = redes[i].activate((passaro.y,
+                                        abs(passaro.y - canos[indice_cano].altura),
+                                        abs(passaro.y - canos[indice_cano].pos_base)))
+            # -1 e 1 -> se o output for > 0.5 então o passaro pula
+            if output[0] > 0.5:
+                passaro.jump()
         chao.mover()
 
         adicionar_cano = False
@@ -282,10 +268,79 @@ def main(genomas, config):  # fitness function
             for i, passaro in enumerate(passaros):
                 if cano.colidir(passaro):
                     passaros.pop(i)
-                    if ai_jogando[1] == True:
-                        lista_genomas[i].fitness -= 1
-                        lista_genomas.pop(i)
-                        redes.pop(i)
+                    lista_genomas[i].fitness -= 1
+                    lista_genomas.pop(i)
+                    redes.pop(i)
+                if not cano.passou and passaro.x > cano.x:
+                    cano.passou = True
+                    adicionar_cano = True
+            cano.mover()
+            if cano.x + cano.CANO_TOPO.get_width() < 0:
+                remover_canos.append(cano)
+
+        if adicionar_cano:
+            pontos += 1
+            canos.append(Cano(600))
+            for genoma in lista_genomas:
+                genoma.fitness += 5
+        for cano in remover_canos:
+            canos.remove(cano)
+
+        for i, passaro in enumerate(passaros):
+            if (passaro.y + passaro.imagem.get_height()) > chao.y or passaro.y < 0:
+                passaros.pop(i)
+                lista_genomas.pop(i)
+                redes.pop(i)
+
+        ai_jogando = True        
+
+        desenhar_tela(tela, passaros, canos, chao, pontos, ai_jogando)
+
+def main(tela):  # fitness function
+    chao = Chao(730)
+    canos = [Cano(800)]
+    pontos = 0
+    relogio = pygame.time.Clock()
+    rodando = True
+    passaros = [Passaro(230, 350)]
+    
+
+
+    while rodando:
+        relogio.tick(30)
+
+        # interação com o usuário
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                rodando = False
+                pygame.quit()
+                quit()
+            
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_UP:
+                    for passaro in passaros:
+                        passaro.jump()
+
+        indice_cano = 0
+        if len(passaros) > 0:
+            if len(canos) > 1 and passaros[0].x > (canos[0].x + canos[0].CANO_TOPO.get_width()):
+                indice_cano = 1
+        else:
+            rodando = False
+            break
+
+        # mover as coisas
+        for i, passaro in enumerate(passaros):
+            passaro.mover()
+        chao.mover()
+
+        adicionar_cano = False
+        remover_canos = []
+        for cano in canos:
+            for i, passaro in enumerate(passaros):
+                if cano.colidir(passaro):
+                    passaros.pop(i)
+                    menu(tela,caminho_config)
                 if not cano.passou and passaro.x > cano.x:
                     cano.passou = True
                     adicionar_cano = True
@@ -297,65 +352,59 @@ def main(genomas, config):  # fitness function
             pontos += 1
             canos.append(Cano(600))
             canos.append(Cano(900))
-            for genoma in lista_genomas:
-                genoma.fitness += 5
         for cano in remover_canos:
             canos.remove(cano)
 
         for i, passaro in enumerate(passaros):
             if (passaro.y + passaro.imagem.get_height()) > chao.y or passaro.y < 0:
                 passaros.pop(i)
+                menu(tela,caminho_config)
+        ai_jogando = False        
+        desenhar_tela(tela, passaros, canos, chao, pontos,ai_jogando)
 
-                if ai_jogando[1] == True:
-                    lista_genomas.pop(i)
-                    redes.pop(i)
-
-        desenhar_tela(tela, passaros, canos, chao, pontos)
-
-def menu(tela):
-    global ai
+def menu(tela, caminho_config):
 
     pygame.display.set_caption("Menu de Jogo")
-    def set_ai_jogando():
-        global ai
-        ai = True
-
-    def set_jogador():
-        global ai
-        ai = False
-
-    def iniciar_jogo():
+    def iniciar_jogo_ai(caminho_config,tela):
+        global ai_jogando
         nonlocal rodando
         rodando = False
+        geracao = 0
+        rodar(caminho_config,tela,geracao,ai_jogando= True)
+
+    def iniciar_jogo(caminho_config,tela):
+        nonlocal rodando
+        rodando = False
+        ai_jogando =False
+        geracao = 0
+        rodar(caminho_config,tela,ai_jogando,geracao)
+        
 
     def sair_jogo():
         pygame.quit()
         quit()
     
-    botao1= Button("Iniciar jogo", 150,300,200,50,RED,GREEN, iniciar_jogo)
-    botao2 = Button("modo jogador",150, 375, 200,50, RED, GREEN, set_jogador)
-    botao3 = Button("modo ia",150, 450, 200,50, RED, GREEN, set_ai_jogando)
-    botao4= Button("sair",150, 550, 200,50, RED, GREEN, sair_jogo)
+    botao1= Button("Iniciar jogo", 150,300,200,50,RED,GREEN, lambda:  iniciar_jogo(caminho_config,tela))
+    botao3 = Button("modo ia",150, 375, 200,50, RED, GREEN, lambda: iniciar_jogo_ai(caminho_config,tela))
+    botao4= Button("sair",150, 475, 200,50, RED, GREEN, sair_jogo)
     rodando= True
     while rodando:
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
                 pygame.quit()
-
+               
             botao1.check_click(evento)
-            botao2.check_click(evento)
             botao3.check_click(evento)
             botao4.check_click(evento)
                 
         tela.blit(IMAGEM_BACK, (0,0))
         botao1.desenhar(tela)
-        botao2.desenhar(tela)
         botao3.desenhar(tela)
         botao4.desenhar(tela)
         pygame.display.update()
-    return True, ai             
+    return True            
 
-def rodar(caminho_config):
+def rodar(caminho_config, tela,geracao,ai_jogando= False):
     config = neat.config.Config(neat.DefaultGenome,
                                 neat.DefaultReproduction,
                                 neat.DefaultSpeciesSet,
@@ -365,14 +414,16 @@ def rodar(caminho_config):
     populacao = neat.Population(config)
     populacao.add_reporter(neat.StdOutReporter(True))
     populacao.add_reporter(neat.StatisticsReporter())
+
     if ai_jogando:
-        populacao.run(main, 50)
+        populacao.run(main_ia, 50)
     else:
-        main(None, None)
+        main(tela)
 
 
 # Execução principal
 if __name__ == '__main__':
     caminho = os.path.dirname(__file__)
     caminho_config = os.path.join(caminho, 'config.txt')
-    rodar(caminho_config)
+    tela = pygame.display.set_mode((TELA_LAR, TELA_ALT))
+    menu(tela,caminho_config)
