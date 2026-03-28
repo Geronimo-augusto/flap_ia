@@ -3,9 +3,6 @@ import os
 import random
 import neat
 
-# Variáveis globais
-ai_jogando = False
-geracao = 0
 
 # Definindo dimensões e cores
 TELA_LARGURA = 500
@@ -34,6 +31,7 @@ class Passaro:
     ROTACAO_MAXIMA = 25
     VELOCIDADE_ROTACAO = 20
     TEMPO_ANIMACAO = 5
+    
 
     def __init__(self, x, y):
         self.x = x
@@ -44,6 +42,7 @@ class Passaro:
         self.tempo = 0
         self.contagem_imagem = 0
         self.imagem = self.IMGS[0]
+        self.geracao = 0
 
     # Método para pular
     def pular(self):
@@ -205,39 +204,89 @@ class Button:
 
 
 # Função para desenhar a tela
-def desenhar_tela(tela, passaros, canos, chao, pontos):
+def desenhar_tela(tela, passaros, canos, chao,pontos,geracao,ai_jogando):
     tela.blit(IMAGEM_BACKGROUND, (0, 0))
     for passaro in passaros:
         passaro.desenhar(tela)
     for cano in canos:
         cano.desenhar(tela)
-
     texto = FONTE_PONTOS.render(f"Pontuação: {pontos}", 1, (255, 255, 255))
     tela.blit(texto, (TELA_LARGURA - 10 - texto.get_width(), 10))
 
     if ai_jogando:
-        texto = FONTE_PONTOS.render(f"Geração: {geracao}", 1, (255, 255, 255))
-        tela.blit(texto, (10, 10))
+            texto = FONTE_PONTOS.render(f"Geração: {geracao}", 1, (255, 255, 255))
+    tela.blit(texto, (10, 10))    
 
     chao.desenhar(tela)
     pygame.display.update()
 
 
-# Função principal do jogo
-def main(genomas, config):
-    global geracao
-    geracao += 1
+# Função do menu
+def menu(tela):
+    botao1 = Button("Iniciar Modo Jogador", 100, 300, 300, 50, RED, GREEN, lambda: None)
+    botao2 = Button("Iniciar Modo Ia", 150, 400, 200, 50, RED, GREEN, lambda: None)
+    rodando = True
+    ai_jogando = False
+    while rodando:
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            if botao1.check_click(evento):
+                rodando = False
+            if botao2.check_click(evento):
+                rodando = False
+                ai_jogando = True    
+        tela.blit(IMAGEM_BACKGROUND, (0, 0))
+        botao1.draw(tela)
+        botao2.draw(tela)
+        pygame.display.update()
+    return ai_jogando
 
+def configAI(genomas,config):
+    redes = []
+    lista_genomas = []
+    passaros = []
+    for _, genoma in genomas:
+        rede = neat.nn.FeedForwardNetwork.create(genoma, config)
+        redes.append(rede)
+        genoma.fitness = 0
+        lista_genomas.append(genoma)
+        passaros.append(Passaro(230, 350))
+    return redes, lista_genomas,passaros    
+
+# Função para rodar o NEAT
+def rodar():
+    caminho = os.path.dirname(__file__)
+    caminho_config = os.path.join(caminho, 'config.txt')
+    config = neat.config.Config(neat.DefaultGenome,
+                                neat.DefaultReproduction,
+                                neat.DefaultSpeciesSet,
+                                neat.DefaultStagnation,
+                                caminho_config)
+
+    populacao = neat.Population(config)
+    populacao.add_reporter(neat.StdOutReporter(True))
+    populacao.add_reporter(neat.StatisticsReporter())
+    
+    
+    populacao.run(main, 50)
+
+def setup():
+    ai_jogando = menu(pygame.display.set_mode((TELA_LARGURA, TELA_ALTURA)))
     if ai_jogando:
-        redes = []
-        lista_genomas = []
-        passaros = []
-        for _, genoma in genomas:
-            rede = neat.nn.FeedForwardNetwork.create(genoma, config)
-            redes.append(rede)
-            genoma.fitness = 0
-            lista_genomas.append(genoma)
-            passaros.append(Passaro(230, 350))
+        rodar()
+    else:
+        main()    
+    
+
+
+# Função principal do jogo
+def main(genomas = None, config = None):
+    ai_jogando= False
+    if genomas and config:
+        redes, lista_genomas,passaros = configAI(genomas,config)
+        ai_jogando = True
     else:
         passaros = [Passaro(230, 350)]
 
@@ -245,12 +294,19 @@ def main(genomas, config):
     canos = [Cano(700)]
     tela = pygame.display.set_mode((TELA_LARGURA, TELA_ALTURA))
     pontos = 0
+    tick_speed = 30
     relogio = pygame.time.Clock()
-
-    rodando = menu(tela)
-
+    
+    rodando = True
     while rodando:
-        relogio.tick(30)
+        relogio.tick(tick_speed)
+        indice_cano = 0
+
+        genration= 0
+        if len(passaros) == 0:
+            for passaro in passaros:
+                passaro.geracao+=1
+                genration = passaro.geracao
 
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
@@ -263,7 +319,7 @@ def main(genomas, config):
                         for passaro in passaros:
                             passaro.pular()
 
-        indice_cano = 0
+        
         if len(passaros) > 0:
             if len(canos) > 1 and passaros[0].x > (canos[0].x + canos[0].CANO_TOPO.get_width()):
                 indice_cano = 1
@@ -286,6 +342,7 @@ def main(genomas, config):
 
         adicionar_cano = False
         remover_canos = []
+
         for cano in canos:
             for i, passaro in enumerate(passaros):
                 if cano.colidir(passaro):
@@ -304,8 +361,9 @@ def main(genomas, config):
         if adicionar_cano:
             pontos += 1
             canos.append(Cano(600))
-            for genoma in lista_genomas:
-                genoma.fitness += 5
+            if ai_jogando:
+                for genoma in lista_genomas:
+                    genoma.fitness += 5
         for cano in remover_canos:
             canos.remove(cano)
 
@@ -316,46 +374,10 @@ def main(genomas, config):
                     lista_genomas.pop(i)
                     redes.pop(i)
 
-        desenhar_tela(tela, passaros, canos, chao, pontos)
-
-
-# Função do menu
-def menu(tela):
-    botao1 = Button("Iniciar Jogo", 150, 300, 200, 50, RED, GREEN, lambda: None)
-    rodando = True
-    while rodando:
-        for evento in pygame.event.get():
-            if evento.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-            if botao1.check_click(evento):
-                rodando = False
-        tela.blit(IMAGEM_BACKGROUND, (0, 0))
-        botao1.draw(tela)
-        pygame.display.update()
-    return True
-
-
-# Função para rodar o NEAT
-def rodar(caminho_config):
-    config = neat.config.Config(neat.DefaultGenome,
-                                neat.DefaultReproduction,
-                                neat.DefaultSpeciesSet,
-                                neat.DefaultStagnation,
-                                caminho_config)
-
-    populacao = neat.Population(config)
-    populacao.add_reporter(neat.StdOutReporter(True))
-    populacao.add_reporter(neat.StatisticsReporter())
-    print(ai_jogando)
-    if ai_jogando:
-        populacao.run(main, 50)
-    else:
-        main(None, None)
-
+        desenhar_tela(tela, passaros, canos, chao,pontos,genration,ai_jogando)
+        
 
 # Execução principal
 if __name__ == '__main__':
-    caminho = os.path.dirname(__file__)
-    caminho_config = os.path.join(caminho, 'config.txt')
-    rodar(caminho_config)
+    setup()
+    
